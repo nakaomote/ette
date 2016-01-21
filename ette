@@ -1,0 +1,47 @@
+#!/bin/bash
+
+set -eu
+set -o pipefail
+
+file="${1}"
+if [[ ${file} == "-" ]]; then
+  file="/dev/stdin"
+fi
+shift
+
+ssh-add -l
+
+ssh_auth="$(mktemp)"
+cat > ${ssh_auth} <<EOF
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK}"
+EOF
+
+trap "rm -f ${ssh_auth}" EXIT
+
+command="${1}"
+window_count=16
+count=0
+
+for host in $(< "${file}"); do
+
+  if [[ ${count} -eq 0 ]]; then
+    tmux clock-mode
+  fi
+
+  if [[ $((${count} % ${window_count})) -eq 0 ]]; then
+    tmux_command="new-window"
+  else
+    tmux_command="split-window"
+  fi
+
+  tmux "${tmux_command}" "source ${ssh_auth}; ssh -t ${host} \"tmux new '${command} || exec /bin/bash'\" || read"
+  tmux select-layout tiled
+
+  count=$((${count}+1))
+  if [[ $((${count} % ${window_count})) -eq 0 ]]; then
+    tmux set-window-option 'synchronize-panes' 'on'
+  fi
+
+done
+
+tmux set-window-option 'synchronize-panes' 'on'
