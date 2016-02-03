@@ -5,24 +5,17 @@ set -o pipefail
 
 file="${1}"
 if [[ ${file} == "-" ]]; then
-  file="/dev/stdin"
+  file=""
 fi
 shift
 
 ssh-add -l
 
-ssh_auth="$(mktemp)"
-cat > ${ssh_auth} <<EOF
-export SSH_AUTH_SOCK="${SSH_AUTH_SOCK}"
-EOF
-
-trap "rm -f ${ssh_auth}" EXIT
-
 command="${1}"
 window_count=16
 count=0
 
-for host in $(< "${file}"); do
+for host in $(cat ${file}); do
 
   if [[ ${count} -eq 0 ]]; then
     tmux clock-mode
@@ -34,7 +27,7 @@ for host in $(< "${file}"); do
     tmux_command="split-window"
   fi
 
-  tmux "${tmux_command}" "source ${ssh_auth}; ssh -t ${host} \"tmux new '${command} || exec /bin/bash'\" || read"
+  tmux "${tmux_command}" "export SSH_AUTH_SOCK="${SSH_AUTH_SOCK}"; ssh -t ${host} \"tmux new '${command} || exec /bin/bash'\" || read"
   tmux select-layout tiled
 
   count=$((${count}+1))
